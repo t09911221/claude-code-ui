@@ -3,6 +3,7 @@ import type { Session, CIStatus } from "../data/schema";
 
 interface SessionCardProps {
   session: Session;
+  disableHover?: boolean;
 }
 
 const toolIcons: Record<string, string> = {
@@ -106,15 +107,15 @@ function getCIStatusColor(status: CIStatus): "green" | "red" | "yellow" | "gray"
   }
 }
 
-export function SessionCard({ session }: SessionCardProps) {
+export function SessionCard({ session, disableHover }: SessionCardProps) {
   const showPendingTool = session.hasPendingToolUse && session.pendingTool;
   // Show path from ~ (e.g., ~/programs/project)
   const dirPath = session.cwd.replace(/^\/Users\/[^/]+/, "~");
 
   return (
-    <HoverCard.Root openDelay={300}>
+    <HoverCard.Root openDelay={750} open={disableHover ? false : undefined}>
       <HoverCard.Trigger>
-        <Card size="2" className={getCardClass(session)} style={{ cursor: "pointer" }}>
+        <Card size="2" className={getCardClass(session)}>
           <Flex direction="column" gap="2">
             {/* Header: directory and time */}
             <Flex justify="between" align="center">

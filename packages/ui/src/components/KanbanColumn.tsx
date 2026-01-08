@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from "react";
 import { Box, Flex, Heading, Text, ScrollArea } from "@radix-ui/themes";
 import { SessionCard } from "./SessionCard";
 import type { Session, SessionStatus } from "../data/schema";
@@ -17,6 +18,37 @@ const headerClassMap = {
 };
 
 export function KanbanColumn({ title, sessions, color }: KanbanColumnProps) {
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const scrollArea = scrollAreaRef.current;
+    if (!scrollArea) return;
+
+    // Find the actual scrollable viewport inside ScrollArea
+    const viewport = scrollArea.querySelector("[data-radix-scroll-area-viewport]");
+    if (!viewport) return;
+
+    const handleScroll = () => {
+      setIsScrolling(true);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      scrollTimeoutRef.current = setTimeout(() => {
+        setIsScrolling(false);
+      }, 150);
+    };
+
+    viewport.addEventListener("scroll", handleScroll);
+    return () => {
+      viewport.removeEventListener("scroll", handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const colorMap = {
     green: "var(--grass-3)",
     orange: "var(--orange-3)",
@@ -57,10 +89,10 @@ export function KanbanColumn({ title, sessions, color }: KanbanColumnProps) {
           </Text>
         </Flex>
 
-        <ScrollArea style={{ flex: 1 }}>
+        <ScrollArea style={{ maxHeight: 420 }} ref={scrollAreaRef}>
           <Flex direction="column" gap="2" pr="2">
             {sessions.map((session) => (
-              <SessionCard key={session.sessionId} session={session} />
+              <SessionCard key={session.sessionId} session={session} disableHover={isScrolling} />
             ))}
             {sessions.length === 0 && (
               <Text

@@ -13,7 +13,10 @@ export function useSessions() {
   const db = getSessionsDbSync();
 
   const query = useLiveQuery(
-    (q) => q.from({ sessions: db.collections.sessions }),
+    (q) =>
+      q
+        .from({ sessions: db.collections.sessions })
+        .orderBy(({ sessions }) => sessions.lastActivityAt, "desc"),
     [db]
   );
 
