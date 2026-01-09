@@ -155,8 +155,8 @@ export interface SessionMetadata {
   startedAt: string;
 }
 
-// Session status (idle is determined by UI based on elapsed time)
-export type SessionStatus = "working" | "waiting";
+// Session status
+export type SessionStatus = "working" | "waiting" | "idle";
 
 export interface StatusResult {
   status: SessionStatus;

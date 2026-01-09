@@ -14,13 +14,23 @@ import type { LogEntry, SessionMetadata, StatusResult } from "./types.js";
 import { log } from "./log.js";
 
 const CLAUDE_PROJECTS_DIR = `${process.env.HOME}/.claude/projects`;
-const PENDING_PERMISSIONS_DIR = `${process.env.HOME}/.claude/pending-permissions`;
+const SIGNALS_DIR = `${process.env.HOME}/.claude/session-signals`;
 
 export interface PendingPermission {
   session_id: string;
   tool_name: string;
   tool_input?: Record<string, unknown>;
   pending_since: string;
+}
+
+export interface StopSignal {
+  session_id: string;
+  stopped_at: string;
+}
+
+export interface SessionEndSignal {
+  session_id: string;
+  ended_at: string;
 }
 
 export interface SessionState {
@@ -41,6 +51,10 @@ export interface SessionState {
   branchChanged?: boolean;
   // Pending permission from PermissionRequest hook
   pendingPermission?: PendingPermission;
+  // True when Stop hook has fired (Claude's turn definitively ended)
+  hasStopSignal?: boolean;
+  // True when SessionEnd hook has fired (session closed)
+  hasEndedSignal?: boolean;
 }
 
 export interface SessionEvent {
@@ -51,9 +65,11 @@ export interface SessionEvent {
 
 export class SessionWatcher extends EventEmitter {
   private watcher: FSWatcher | null = null;
-  private permissionWatcher: FSWatcher | null = null;
+  private signalWatcher: FSWatcher | null = null;
   private sessions = new Map<string, SessionState>();
   private pendingPermissions = new Map<string, PendingPermission>();
+  private stopSignals = new Map<string, StopSignal>();
+  private endedSignals = new Map<string, SessionEndSignal>();
   private debounceTimers = new Map<string, NodeJS.Timeout>();
   private debounceMs: number;
   private staleCheckInterval: NodeJS.Timeout | null = null;
@@ -75,6 +91,20 @@ export class SessionWatcher extends EventEmitter {
    */
   getPendingPermission(sessionId: string): PendingPermission | undefined {
     return this.pendingPermissions.get(sessionId);
+  }
+
+  /**
+   * Check if a session has received a stop signal (turn ended).
+   */
+  hasStopSignal(sessionId: string): boolean {
+    return this.stopSignals.has(sessionId);
+  }
+
+  /**
+   * Check if a session has received an ended signal (session closed).
+   */
+  hasEndedSignal(sessionId: string): boolean {
+    return this.endedSignals.has(sessionId);
   }
 
   async start(): Promise<void> {
@@ -100,28 +130,28 @@ export class SessionWatcher extends EventEmitter {
       .on("unlink", (path) => this.handleDelete(path))
       .on("error", (error) => this.emit("error", error));
 
-    // Watch pending permissions directory for PermissionRequest hook output
-    this.permissionWatcher = watch(PENDING_PERMISSIONS_DIR, {
+    // Watch signals directory for hook output (permission, stop, session-end)
+    this.signalWatcher = watch(SIGNALS_DIR, {
       persistent: true,
       ignoreInitial: false,
       depth: 0,
     });
 
-    this.permissionWatcher
+    this.signalWatcher
       .on("add", (path) => {
         if (!path.endsWith(".json")) return;
-        this.handlePendingPermission(path);
+        this.handleSignalFile(path);
       })
       .on("change", (path) => {
         if (!path.endsWith(".json")) return;
-        this.handlePendingPermission(path);
+        this.handleSignalFile(path);
       })
       .on("unlink", (path) => {
         if (!path.endsWith(".json")) return;
-        this.handlePendingPermissionRemoved(path);
+        this.handleSignalRemoved(path);
       })
       .on("error", () => {
-        // Ignore errors - directory may not exist if hook isn't set up
+        // Ignore errors - directory may not exist if hooks aren't set up
       });
 
     // Wait for initial scan to complete
@@ -129,8 +159,8 @@ export class SessionWatcher extends EventEmitter {
       this.watcher!.on("ready", resolve);
     });
 
-    // Load any existing pending permissions
-    await this.loadExistingPendingPermissions();
+    // Load any existing signal files
+    await this.loadExistingSignals();
 
     // Start periodic stale check to detect sessions that have gone idle
     // This catches cases where the turn ends but no turn_duration event is written
@@ -140,14 +170,14 @@ export class SessionWatcher extends EventEmitter {
   }
 
   /**
-   * Load any existing pending permission files on startup.
+   * Load any existing signal files on startup.
    */
-  private async loadExistingPendingPermissions(): Promise<void> {
+  private async loadExistingSignals(): Promise<void> {
     try {
-      const files = await readdir(PENDING_PERMISSIONS_DIR);
+      const files = await readdir(SIGNALS_DIR);
       for (const file of files) {
         if (file.endsWith(".json")) {
-          await this.handlePendingPermission(join(PENDING_PERMISSIONS_DIR, file));
+          await this.handleSignalFile(join(SIGNALS_DIR, file));
         }
       }
     } catch {
@@ -156,38 +186,88 @@ export class SessionWatcher extends EventEmitter {
   }
 
   /**
-   * Handle a pending permission file being created/updated.
+   * Parse signal filename to extract session ID and signal type.
+   * Format: <session_id>.<type>.json (e.g., abc123.permission.json)
    */
-  private async handlePendingPermission(filepath: string): Promise<void> {
+  private parseSignalFilename(filepath: string): { sessionId: string; type: "permission" | "stop" | "ended" } | null {
+    const filename = filepath.split("/").pop() || "";
+    const match = filename.match(/^(.+)\.(permission|stop|ended)\.json$/);
+    if (!match) return null;
+    return { sessionId: match[1], type: match[2] as "permission" | "stop" | "ended" };
+  }
+
+  /**
+   * Handle a signal file being created/updated.
+   */
+  private async handleSignalFile(filepath: string): Promise<void> {
+    const parsed = this.parseSignalFilename(filepath);
+    if (!parsed) return;
+
+    const { sessionId, type } = parsed;
+
     try {
       const content = await readFile(filepath, "utf-8");
-      const permission = JSON.parse(content) as PendingPermission;
-      const sessionId = permission.session_id;
+      const data = JSON.parse(content);
 
-      if (!sessionId) return;
+      if (type === "permission") {
+        const permission = data as PendingPermission;
+        log("Watcher", `Pending permission for session ${sessionId}: ${permission.tool_name}`);
+        this.pendingPermissions.set(sessionId, permission);
 
-      log("Watcher", `Pending permission for session ${sessionId}: ${permission.tool_name}`);
+        // Update session if it exists
+        const session = this.sessions.get(sessionId);
+        if (session) {
+          const previousStatus = session.status;
+          session.pendingPermission = permission;
+          session.status = {
+            ...session.status,
+            status: "waiting",
+            hasPendingToolUse: true,
+          };
+          this.emit("session", { type: "updated", session, previousStatus } satisfies SessionEvent);
+        }
+      } else if (type === "stop") {
+        const stopSignal = data as StopSignal;
+        log("Watcher", `Stop signal for session ${sessionId}`);
+        this.stopSignals.set(sessionId, stopSignal);
+        // Clear any pending permission since turn ended
+        this.pendingPermissions.delete(sessionId);
 
-      // Store the pending permission
-      this.pendingPermissions.set(sessionId, permission);
+        // Update session to waiting_for_input
+        const session = this.sessions.get(sessionId);
+        if (session) {
+          const previousStatus = session.status;
+          session.hasStopSignal = true;
+          session.pendingPermission = undefined;
+          session.status = {
+            ...session.status,
+            status: "waiting",
+            hasPendingToolUse: false,
+          };
+          this.emit("session", { type: "updated", session, previousStatus } satisfies SessionEvent);
+        }
+      } else if (type === "ended") {
+        const endSignal = data as SessionEndSignal;
+        log("Watcher", `Session ended signal for ${sessionId}`);
+        this.endedSignals.set(sessionId, endSignal);
+        // Clear all signals for this session
+        this.pendingPermissions.delete(sessionId);
+        this.stopSignals.delete(sessionId);
 
-      // Update the session if it exists
-      const session = this.sessions.get(sessionId);
-      if (session) {
-        const previousStatus = session.status;
-        session.pendingPermission = permission;
-        // Override status to show pending approval
-        session.status = {
-          ...session.status,
-          status: "waiting",
-          hasPendingToolUse: true,
-        };
-
-        this.emit("session", {
-          type: "updated",
-          session,
-          previousStatus,
-        } satisfies SessionEvent);
+        // Update session to idle
+        const session = this.sessions.get(sessionId);
+        if (session) {
+          const previousStatus = session.status;
+          session.hasEndedSignal = true;
+          session.hasStopSignal = false;
+          session.pendingPermission = undefined;
+          session.status = {
+            ...session.status,
+            status: "idle",
+            hasPendingToolUse: false,
+          };
+          this.emit("session", { type: "updated", session, previousStatus } satisfies SessionEvent);
+        }
       }
     } catch {
       // Ignore parse errors
@@ -195,33 +275,36 @@ export class SessionWatcher extends EventEmitter {
   }
 
   /**
-   * Handle a pending permission file being removed.
+   * Handle a signal file being removed.
    */
-  private handlePendingPermissionRemoved(filepath: string): void {
-    // Extract session ID from filename (e.g., abc123.json -> abc123)
-    const filename = filepath.split("/").pop() || "";
-    const sessionId = filename.replace(".json", "");
+  private handleSignalRemoved(filepath: string): void {
+    const parsed = this.parseSignalFilename(filepath);
+    if (!parsed) return;
 
-    if (!sessionId) return;
+    const { sessionId, type } = parsed;
+    log("Watcher", `Signal removed for session ${sessionId}: ${type}`);
 
-    log("Watcher", `Pending permission cleared for session ${sessionId}`);
-
-    // Clear the pending permission
-    this.pendingPermissions.delete(sessionId);
-
-    // Update the session if it exists
-    const session = this.sessions.get(sessionId);
-    if (session && session.pendingPermission) {
-      const previousStatus = session.status;
-      session.pendingPermission = undefined;
-      // Re-derive status from entries
-      session.status = deriveStatus(session.entries);
-
-      this.emit("session", {
-        type: "updated",
-        session,
-        previousStatus,
-      } satisfies SessionEvent);
+    if (type === "permission") {
+      this.pendingPermissions.delete(sessionId);
+      const session = this.sessions.get(sessionId);
+      if (session && session.pendingPermission) {
+        const previousStatus = session.status;
+        session.pendingPermission = undefined;
+        session.status = deriveStatus(session.entries);
+        this.emit("session", { type: "updated", session, previousStatus } satisfies SessionEvent);
+      }
+    } else if (type === "stop") {
+      this.stopSignals.delete(sessionId);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.hasStopSignal = false;
+      }
+    } else if (type === "ended") {
+      this.endedSignals.delete(sessionId);
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.hasEndedSignal = false;
+      }
     }
   }
 
@@ -231,9 +314,9 @@ export class SessionWatcher extends EventEmitter {
       this.watcher = null;
     }
 
-    if (this.permissionWatcher) {
-      this.permissionWatcher.close();
-      this.permissionWatcher = null;
+    if (this.signalWatcher) {
+      this.signalWatcher.close();
+      this.signalWatcher = null;
     }
 
     // Clear stale check interval
@@ -259,7 +342,22 @@ export class SessionWatcher extends EventEmitter {
 
     // Try to delete the file
     try {
-      await unlink(join(PENDING_PERMISSIONS_DIR, `${sessionId}.json`));
+      await unlink(join(SIGNALS_DIR, `${sessionId}.permission.json`));
+    } catch {
+      // File may already be deleted
+    }
+  }
+
+  /**
+   * Clear stop signal for a session (called when new user prompt is seen).
+   */
+  async clearStopSignal(sessionId: string): Promise<void> {
+    if (!this.stopSignals.has(sessionId)) return;
+
+    this.stopSignals.delete(sessionId);
+
+    try {
+      await unlink(join(SIGNALS_DIR, `${sessionId}.stop.json`));
     } catch {
       // File may already be deleted
     }
@@ -396,6 +494,20 @@ export class SessionWatcher extends EventEmitter {
         await this.clearPendingPermission(sessionId);
       }
 
+      // Check if any new entry is a user prompt (new turn starting) - if so, clear stop signal
+      const hasUserPrompt = newEntries.some((entry) => {
+        if (entry.type === "user") {
+          const content = (entry as { message: { content: unknown } }).message.content;
+          // User prompt has string content, not tool_result array
+          return typeof content === "string";
+        }
+        return false;
+      });
+
+      if (hasUserPrompt && this.stopSignals.has(sessionId)) {
+        await this.clearStopSignal(sessionId);
+      }
+
       // Derive status from all entries
       let status = deriveStatus(allEntries);
       const previousStatus = existingSession?.status;
@@ -427,6 +539,8 @@ export class SessionWatcher extends EventEmitter {
         gitRepoId: gitInfo.repoId,
         branchChanged,
         pendingPermission,
+        hasStopSignal: this.stopSignals.has(sessionId),
+        hasEndedSignal: this.endedSignals.has(sessionId),
       };
 
       // Store session

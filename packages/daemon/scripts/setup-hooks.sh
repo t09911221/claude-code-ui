@@ -1,19 +1,21 @@
 #!/bin/bash
 # Setup script for claude-code-ui daemon hooks
-# This installs the PermissionRequest hook that enables accurate "Needs Approval" detection
+# Installs hooks for accurate session state detection:
+# - PermissionRequest: detect when waiting for user approval
+# - Stop: detect when Claude finishes responding
+# - SessionEnd: detect when session closes
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK_SCRIPT="$SCRIPT_DIR/permission-request-hook.sh"
 SETTINGS_FILE="$HOME/.claude/settings.json"
-PENDING_DIR="$HOME/.claude/pending-permissions"
+SIGNALS_DIR="$HOME/.claude/session-signals"
 
 echo "Setting up claude-code-ui hooks..."
 
-# Create pending permissions directory
-mkdir -p "$PENDING_DIR"
-echo "Created $PENDING_DIR"
+# Create signals directory
+mkdir -p "$SIGNALS_DIR"
+echo "Created $SIGNALS_DIR"
 
 # Check if jq is installed
 if ! command -v jq &> /dev/null; then
@@ -32,19 +34,29 @@ fi
 cp "$SETTINGS_FILE" "$SETTINGS_FILE.backup"
 echo "Backed up settings to $SETTINGS_FILE.backup"
 
-# Check if PermissionRequest hook already exists
-if jq -e '.hooks.PermissionRequest' "$SETTINGS_FILE" > /dev/null 2>&1; then
-    echo "PermissionRequest hook already configured in settings.json"
-    echo "To update, remove the existing hook and run this script again."
-    exit 0
-fi
+# Build the hooks configuration
+# PermissionRequest: write pending permission file
+PERMISSION_HOOK="$SCRIPT_DIR/hooks/permission-request.sh"
+# Stop: write turn-ended signal
+STOP_HOOK="$SCRIPT_DIR/hooks/stop.sh"
+# SessionEnd: write session-ended signal
+SESSION_END_HOOK="$SCRIPT_DIR/hooks/session-end.sh"
 
-# Add the PermissionRequest hook with new format (matcher string + hooks array)
-jq --arg hook "$HOOK_SCRIPT" '.hooks.PermissionRequest = [{"matcher": "", "hooks": [{"type": "command", "command": $hook}]}]' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
+# Add all hooks
+jq --arg perm "$PERMISSION_HOOK" \
+   --arg stop "$STOP_HOOK" \
+   --arg end "$SESSION_END_HOOK" '
+  .hooks.PermissionRequest = [{"matcher": "", "hooks": [{"type": "command", "command": $perm}]}] |
+  .hooks.Stop = [{"matcher": "", "hooks": [{"type": "command", "command": $stop}]}] |
+  .hooks.SessionEnd = [{"matcher": "", "hooks": [{"type": "command", "command": $end}]}]
+' "$SETTINGS_FILE" > "$SETTINGS_FILE.tmp"
 mv "$SETTINGS_FILE.tmp" "$SETTINGS_FILE"
 
-echo "Added PermissionRequest hook to $SETTINGS_FILE"
+echo "Added hooks to $SETTINGS_FILE:"
+echo "  - PermissionRequest (detect approval needed)"
+echo "  - Stop (detect turn ended)"
+echo "  - SessionEnd (detect session closed)"
 echo ""
-echo "Setup complete! The daemon will now accurately detect when Claude Code is waiting for permission."
+echo "Setup complete! The daemon will now accurately track session states."
 echo ""
-echo "Note: You may need to restart any running Claude Code sessions for the hook to take effect."
+echo "Note: You may need to restart any running Claude Code sessions for hooks to take effect."
