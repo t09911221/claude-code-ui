@@ -215,17 +215,17 @@ describe("Session Tracking", () => {
     });
 
     it("should transition to waiting_for_approval after tool use timeout", async () => {
-      // Create entries from 10 seconds ago (past the 5s APPROVAL_TIMEOUT)
-      const oldTime = new Date(Date.now() - 10 * 1000).toISOString();
+      // Create entries from 20 seconds ago (past the 15s APPROVAL_TIMEOUT)
+      const oldTime = new Date(Date.now() - 20 * 1000).toISOString();
       const userEntry = createUserEntry("Run a command", oldTime);
-      const assistantEntry = createAssistantEntry("I'll run that", oldTime, true); // has tool_use
+      const assistantEntry = createAssistantEntry("I'll run that", oldTime, true); // has tool_use (Bash - not auto-approved)
 
       await writeFile(TEST_LOG_FILE, userEntry + assistantEntry);
 
       const { entries } = await tailJSONL(TEST_LOG_FILE, 0);
       const status = deriveStatus(entries);
 
-      // After APPROVAL_TIMEOUT (5s), tool_use should transition to "waiting" (waiting_for_approval)
+      // After APPROVAL_TIMEOUT (15s), tool_use should transition to "waiting" (waiting_for_approval)
       expect(status.status).toBe("waiting");
       expect(status.hasPendingToolUse).toBe(true);
     });

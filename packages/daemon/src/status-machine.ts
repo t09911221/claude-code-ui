@@ -182,9 +182,22 @@ export function logEntryToEvent(entry: LogEntry): StatusEvent | null {
 
   if (entry.type === "assistant") {
     const assistantEntry = entry as AssistantEntry;
-    // Filter out Task tools - subagents run automatically and don't need approval
+    // Filter out tools that are typically auto-approved and don't need user approval
+    // These tools run automatically without user intervention
+    const autoApprovedTools = new Set([
+      "Task",           // Subagents
+      "Read",           // File reading
+      "Glob",           // File pattern matching
+      "Grep",           // Content search
+      "WebSearch",      // Web search
+      "WebFetch",       // URL fetching
+      "TodoWrite",      // Todo list management
+      "AskUserQuestion", // Asking user questions (auto-approved, just waits for response)
+      "NotebookEdit",   // Notebook editing (often auto-approved)
+      "TaskOutput",     // Getting task output
+    ]);
     const toolUseBlocks = assistantEntry.message.content.filter(
-      (b) => b.type === "tool_use" && b.name !== "Task"
+      (b) => b.type === "tool_use" && !autoApprovedTools.has(b.name)
     );
 
     if (toolUseBlocks.length > 0) {
@@ -235,7 +248,7 @@ export function deriveStatusFromMachine(entries: LogEntry[]): {
   const lastActivityTime = context.lastActivityAt ? new Date(context.lastActivityAt).getTime() : 0;
   const timeSinceActivity = now - lastActivityTime;
 
-  const APPROVAL_TIMEOUT_MS = 5 * 1000; // 5 seconds
+  const APPROVAL_TIMEOUT_MS = 15 * 1000; // 15 seconds - longer to avoid false positives during active tool execution
   const STALE_TIMEOUT_MS = 60 * 1000; // 60 seconds
 
   // Apply timeout transitions (idle is handled by the UI based on elapsed time)
